@@ -5,7 +5,6 @@ import (
 	"log"
 	"math"
 	r "math/rand/v2"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -69,9 +68,9 @@ func TestNewError(t *testing.T) {
 			_, err := NewDictionary(tt.words)
 			if tt.wantErr {
 				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+				return
 			}
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -223,13 +222,12 @@ func TestDic_Decode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d, _ := NewDictionary(tt.words)
 			got, err := d.Decode(tt.mnemonic)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Dic.Decode() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Dic.Decode() = %v, want %v", got, tt.want)
-			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -315,9 +313,7 @@ func Test_dictionary_idxToBitString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := idxToBitString(tt.idx, tt.maxBitsLen); got != tt.want {
-				t.Errorf("dictionary.idxToBitString() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, idxToBitString(tt.idx, tt.maxBitsLen))
 		})
 	}
 }
