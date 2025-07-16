@@ -45,7 +45,7 @@ func TestNewError(t *testing.T) {
 		{
 			"not trimmed words",
 			[]string{"foo", "bar", "fizz", "buzz "},
-			true,
+			false,
 		},
 		{
 			"not unique words",
@@ -55,6 +55,11 @@ func TestNewError(t *testing.T) {
 		{
 			"empty word",
 			[]string{"foo", "bar", "fizz", ""},
+			true,
+		},
+		{
+			"space word",
+			[]string{"foo", "bar", "fizz", " \t"},
 			true,
 		},
 		{
@@ -88,6 +93,13 @@ func TestDic_Encode(t *testing.T) {
 			[]string{"0", "1"},
 			[]byte("42"),
 			[]string{"0", "0", "0", "1", "1", "0", "1", "0", "0", "0", "0", "1", "1", "0", "0", "1", "0"},
+			false,
+		},
+		{
+			"word trim",
+			[]string{"0 ", " 1 \t"},
+			[]byte{42},
+			[]string{"1", "0", "0", "1", "0", "1", "0", "1", "0"},
 			false,
 		},
 		{

@@ -25,22 +25,18 @@ type Recoder interface {
 	// Encode converts the input byte slice into a mnemonic.
 	Encode(data []byte) ([]string, error)
 
-	// Decode takes a  mnemonic and returns the original byte slice.
+	// Decode takes a mnemonic and returns the original byte slice.
 	Decode(mnemonic []string) ([]byte, error)
 }
 
 // NewDictionary creates a new Recoder instance using the provided slice of words.
 // Returns an error if there are any problems with the words.
 func NewDictionary(words []string) (Recoder, error) {
-	if len(words) < 2 {
-		return nil, errors.New("more than 2 words are required")
+	if len(words) < 2 || (len(words)&(len(words)-1)) != 0 {
+		return nil, errors.New("dictionary should be complete and len(words) == 2^N")
 	}
 
-	bitLenRaw := math.Log2(float64(len(words)))
-	if bitLenRaw != float64(int(bitLenRaw)) {
-		return nil, errors.New("dictionary should be complete, len(words) == 2^N")
-	}
-	bitsBatchSize := int(bitLenRaw)
+	bitsBatchSize := int(math.Log2(float64(len(words))))
 
 	bitsToWord := make(map[string]string, len(words))
 	wordToBits := make(map[string]string, len(words))
@@ -49,16 +45,13 @@ func NewDictionary(words []string) (Recoder, error) {
 	h := sha256.New()
 
 	for i, word := range words {
-		if word != strings.TrimSpace(word) {
-			return nil, errors.New("all words should be trimmed")
-		}
-
+		word = strings.TrimSpace(word)
 		if word == "" {
 			return nil, errors.New("words should not be empty")
 		}
 
 		if dups[word] {
-			return nil, errors.New("words should be unique")
+			return nil, fmt.Errorf("dictionary has duplicate: %s", word)
 		}
 		dups[word] = true
 
@@ -142,7 +135,7 @@ func (d *dictionary) Encode(data []byte) ([]string, error) {
 		lb := bits[i : i+d.bitsBatchSize]
 		word, ok := d.bitsToWord[lb]
 		if !ok {
-			return mnemonic, errors.New("this should not exists")
+			return mnemonic, fmt.Errorf("bits-to-word mapping not found for bits: %s", lb)
 		}
 
 		mnemonic = append(mnemonic, word)
@@ -153,7 +146,7 @@ func (d *dictionary) Encode(data []byte) ([]string, error) {
 		tailBits += strings.Repeat("1", d.bitsBatchSize-tailLen)
 		tailWord, ok := d.bitsToWord[tailBits]
 		if !ok {
-			return mnemonic, errors.New("this should not exists")
+			return mnemonic, fmt.Errorf("bits-to-word mapping not found for tail bits: %s", tailBits)
 		}
 		mnemonic = append(mnemonic, tailWord)
 	}
@@ -209,12 +202,12 @@ func (d *dictionary) Decode(mnemonic []string) ([]byte, error) {
 		}
 	}
 
-	deccs, err := d.checksum(dst)
+	decodedChecksum, err := d.checksum(dst)
 	if err != nil {
 		return nil, err
 	}
 
-	if checksum != deccs {
+	if checksum != decodedChecksum {
 		return nil, errors.New("invalid checksum")
 	}
 
