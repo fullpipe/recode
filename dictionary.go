@@ -26,10 +26,10 @@ type Recoder interface {
 }
 
 // NewDictionary creates a new Recoder instance using the provided slice of words.
-// Returns an error if any problems with words.
+// Returns an error if there are any problems with the words.
 func NewDictionary(words []string) (Recoder, error) {
 	if len(words) < 2 {
-		return nil, errors.New("more then 2 words required")
+		return nil, errors.New("more than 2 words are required")
 	}
 
 	bitsToWord := make(map[string]string, len(words))
@@ -39,7 +39,7 @@ func NewDictionary(words []string) (Recoder, error) {
 
 	for i, word := range words {
 		if word != strings.TrimSpace(word) {
-			return nil, errors.New("all words should be trimed")
+			return nil, errors.New("all words should be trimmed")
 		}
 
 		if word == "" {
@@ -82,10 +82,9 @@ func (d *dictionary) Encode(data []byte) ([]string, error) {
 	bits := bitsBuilder.String() + cs
 
 	right, left := 0, d.maxBitsLen
-	for right < left {
+	for right < len(bits) {
 		if left > len(bits) {
 			left = len(bits)
-			continue
 		}
 
 		lb := bits[right:left]
@@ -108,13 +107,15 @@ func (d *dictionary) Decode(mnemonic []string) ([]byte, error) {
 	for _, m := range mnemonic {
 		idx, ok := d.wordToBits[m]
 		if !ok {
-			return nil, errors.New("invalid mnemonic")
+			return nil, errors.New("invalid mnemonic word")
 		}
 		bitsBuilder.WriteString(fmt.Sprintf("%b", idx))
 	}
 
-	// thanks to https://medium.com/@yaievgeniy/converting-bit-binary-string-to-bytes-in-go-and-not-only-7888156e9576
 	bitString := bitsBuilder.String()
+	if len(bitString) < checksumLen {
+		return nil, errors.New("mnemonic too short for checksum")
+	}
 	checksum := bitString[len(bitString)-checksumLen:]
 	bitString = bitString[:len(bitString)-checksumLen]
 
