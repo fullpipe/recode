@@ -6,7 +6,7 @@
 
 Package recode provides functionality to encode and decode any byte data into a mnemonic and back, using a custom word list.
 
-> Words list should be `2^N` long, 2,4,8, etc.
+> The word list must have a length that is a power of two (e.g., 2, 4, 8, 16, ...).
 
 ## Example
 

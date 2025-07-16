@@ -39,7 +39,7 @@ func NewDictionary(words []string) (Recoder, error) {
 	}
 
 	bitLenRaw := math.Log2(float64(len(words)))
-	if bitLenRaw != float64(int64(bitLenRaw)) {
+	if bitLenRaw != float64(int(bitLenRaw)) {
 		return nil, errors.New("dictionary should be complete, len(words) == 2^N")
 	}
 	bitsBatchSize := int(bitLenRaw)
