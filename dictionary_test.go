@@ -157,6 +157,23 @@ func TestDic_Encode(t *testing.T) {
 	}
 }
 
+func TestDic_Encode_Wallet(t *testing.T) {
+	rec, err := NewDictionary([]string{"🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍐", "🍑", "🍒", "🍓", "🫐", "🥝", "🍅", "🫒", "🥥", "🥑", "🍆", "🥔", "🥕", "🌽", "🌶️", "🫑", "🥒", "🥬", "🥦", "🧄", "🧅", "🥜", "🫘"})
+	assert.NoError(t, err)
+
+	// 128 bit
+	entropy := []byte{138, 252, 148, 132, 177, 104, 151, 15, 191, 157, 140, 195, 148, 64, 81, 116}
+
+	salat, err := rec.Encode(entropy)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"🍒", "🥥", "🍒", "🥜", "🍐", "🍐", "🍈", "🍌", "🥥", "🫐", "🍉", "🍒", "🫒", "🫘", "🍅", "🧄", "🧅", "🥥", "🍆", "🍈", "🥒", "🍎", "🫒", "🍉", "🥥", "🥝", "🍆"}, salat)
+
+	decodedEntropy, err := rec.Decode(salat)
+	assert.NoError(t, err)
+	assert.Equal(t, entropy, decodedEntropy)
+}
+
 // https://www.blockplate.com/pages/bip-39-wordlist
 func TestDic_Decode(t *testing.T) {
 	tests := []struct {
