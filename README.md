@@ -63,7 +63,7 @@ fruits, _ := recode.NewDictionary([]string{"🍇", "🍈", "🍉", "🍊", "🍋
 
 salat, _ := fruits.Encode(entropy)
 
-log.Println(string(salat)) // 🍇 🥦 🍆 🍇 🥑 🫑 🥦 🍇 🥔 🫚 🍇 🍍 🍇 🌽 🍑 ...
+log.Println(string(salat)) // 🍒 🧄 🍆 🥕 🥑 🫑 🍉 🍇 🥔 🫚 🥥 🍍 🍎 🌽 🍑 ...
 ```
 
 ## Features
