@@ -3,6 +3,7 @@ package recode
 import (
 	"crypto/rand"
 	"log"
+	"math"
 	r "math/rand/v2"
 	"reflect"
 	"strings"
@@ -33,22 +34,32 @@ func TestNewError(t *testing.T) {
 			false,
 		},
 		{
+			"tree words",
+			[]string{"foo", "bar", "fizz"},
+			true,
+		},
+		{
+			"four words",
+			[]string{"foo", "bar", "fizz", "buzz"},
+			false,
+		},
+		{
 			"not trimmed words",
-			[]string{"foo", "bar "},
+			[]string{"foo", "bar", "fizz", "buzz "},
 			true,
 		},
 		{
 			"not unique words",
-			[]string{"foo", "bar", "foo"},
+			[]string{"foo", "bar", "fizz", "fizz"},
 			true,
 		},
 		{
 			"empty word",
-			[]string{"foo", "bar", ""},
+			[]string{"foo", "bar", "fizz", ""},
 			true,
 		},
 		{
-			"ok",
+			"emoji",
 			[]string{"foo", "bar", "buzz", "👍"},
 			false,
 		},
@@ -74,56 +85,79 @@ func TestDic_Encode(t *testing.T) {
 		wantErr bool
 	}{
 		{
+			"zero one",
+			[]string{"0", "1"},
+			[]byte("42"),
+			[]string{"0", "0", "0", "1", "1", "0", "1", "0", "0", "0", "0", "1", "1", "0", "0", "1", "0"},
+			false,
+		},
+		{
 			"base",
-			[]string{"foo", "bar", "buzz"},
+			[]string{"foo", "bar", "fizz", "buzz"},
 			[]byte("1"),
-			[]string{"foo", "foo", "bar", "buzz", "foo", "foo", "bar", "buzz", "foo", "foo"},
+			[]string{"fizz", "foo", "buzz", "foo", "bar"},
 			false,
 		},
 		{
 			"nice",
-			[]string{"🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍐", "🍑", "🍒", "🍓", "🫐", "🥝", "🍅", "🫒", "🥥", "🥑", "🍆", "🥔", "🥕", "🌽", "🌶️", "🫑", "🥒", "🥬", "🥦", "🧄", "🧅", "🥜", "🫘", "🌰", "🫚", "🫛"},
+			[]string{"🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍐", "🍑", "🍒", "🍓", "🫐", "🥝", "🍅", "🫒", "🥥", "🥑", "🍆", "🥔", "🥕", "🌽", "🌶️", "🫑", "🥒", "🥬", "🥦", "🧄", "🧅", "🥜", "🫘"},
 			[]byte("nice!"),
-			[]string{"🍇", "🥦", "🍆", "🍇", "🥑", "🫑", "🥦", "🍇", "🍇", "🥔", "🫚", "🍇", "🍍"},
+			[]string{"🫒", "🫐", "🥒", "🥔", "🌽", "🍍", "🥒", "🍐", "🍈"},
 			false,
 		},
 		{
 			"empty data gives just checksum",
-			[]string{"foo", "bar", "buzz"},
+			[]string{"foo", "bar", "fizz", "buzz"},
 			[]byte{},
-			[]string{"buzz", "buzz"},
+			[]string{"fizz"},
 			false,
 		},
 		{
 			"nice with bib39",
 			Bip39Dictionary,
 			[]byte("nice!"),
-			[]string{"abandon", "system", "normal", "raw", "drill"},
+			[]string{"kit", "hover", "enrich", "sun", "dumb"},
 			false,
 		},
 		{
 			"my own random dictionary",
-			[]string{"my", "own", "random", "dictionary", "to", "have", "more", "fun", "with", "words"},
+			[]string{"my", "own", "random", "words", "to", "have", "more", "fun"},
 			[]byte("nice!"),
-			[]string{"my", "more", "fun", "my", "my", "more", "words", "my", "more", "my", "my", "more", "more", "my", "have", "my", "my", "with", "my", "more", "random"},
+			[]string{"have", "words", "words", "to", "more", "to", "have", "to", "words", "words", "own", "random", "random", "my", "fun"},
+			false,
+		},
+		{
+			// 0101010 1001  00000111111 11111000000 01111111110 01010001000 00000010101 0 00101010 11
+			// festival among way lemon extra actor betray
+			"uses full dictionary to encode",
+			Bip39Dictionary,
+			[]byte{7, 255, 1, 255, 40, 128, 42, 42},
+			[]string{"festival", "among", "way", "lemon", "extra", "actor", "betray"},
 			false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, _ := NewDictionary(tt.words)
+			d, err := NewDictionary(tt.words)
+			assert.NoError(t, err)
+
 			got, err := d.Encode(tt.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Dic.Encode() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Dic.Encode() = %v, want %v", got, tt.want)
-			}
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.want, got)
+
+			dec, err := d.Decode(got)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.data, dec)
 		})
 	}
 }
 
+// https://www.blockplate.com/pages/bip-39-wordlist
 func TestDic_Decode(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -133,32 +167,39 @@ func TestDic_Decode(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			"base",
-			[]string{"foo", "bar", "buzz"},
-			[]string{"foo", "foo", "bar", "buzz", "foo", "foo", "bar", "buzz", "foo", "foo"},
-			[]byte("1"),
-			false,
-		},
-		{
-			"invalid words",
-			[]string{"foo", "bar", "buzz"},
-			[]string{"WTF", "foo", "bar", "buzz", "foo", "foo", "bar", "buzz", "foo", "foo"},
-			nil,
-			true,
-		},
-		{
-			"invalid checksumm",
-			[]string{"foo", "bar", "buzz"},
-			[]string{"foo", "foo", "bar", "buzz", "foo", "foo", "bar", "buzz", "foo", "bar"},
-			nil,
-			true,
-		},
-		{
-			"nice with bib39",
+			"valid",
 			Bip39Dictionary,
-			[]string{"abandon", "system", "normal", "raw", "drill"},
-			[]byte("nice!"),
+			[]string{"festival", "among", "way", "lemon", "extra", "actor", "betray"},
+			[]byte{7, 255, 1, 255, 40, 128, 42, 42},
 			false,
+		},
+		{
+			"empty",
+			Bip39Dictionary,
+			[]string{},
+			nil,
+			true,
+		},
+		{
+			"invalid word for checksum",
+			Bip39Dictionary,
+			[]string{"WTF", "among", "way", "lemon", "extra", "actor", "betray"},
+			nil,
+			true,
+		},
+		{
+			"invalid word in mnemonic",
+			Bip39Dictionary,
+			[]string{"festival", "WTF", "way", "lemon", "extra", "actor", "betray"},
+			nil,
+			true,
+		},
+		{
+			"invalid checksum",
+			Bip39Dictionary,
+			[]string{"fire", "among", "way", "lemon", "extra", "actor", "betray"},
+			nil,
+			true,
 		},
 	}
 	for _, tt := range tests {
@@ -178,7 +219,8 @@ func TestDic_Decode(t *testing.T) {
 
 func TestDic_Random(t *testing.T) {
 	for i := 0; i < 10000; i++ {
-		wordsNum := r.IntN(100) + 2
+		wordsExp := r.IntN(10) + 1
+		wordsNum := int(math.Pow(2, float64(wordsExp)))
 		words := make([]string, 0, wordsNum)
 		for j := 0; j < wordsNum; j++ {
 			words = append(words, randomWord())
@@ -208,4 +250,95 @@ func randomWord() string {
 	}
 
 	return strings.TrimSpace(string(b))
+}
+
+func Test_dictionary_idxToBitString(t *testing.T) {
+	tests := []struct {
+		name       string
+		maxBitsLen int
+		idx        int
+		want       string
+	}{
+		{
+			"one",
+			4,
+			1,
+			"0001",
+		},
+		{
+			"two",
+			4,
+			2,
+			"0010",
+		},
+		{
+			"two",
+			5,
+			2,
+			"00010",
+		},
+		{
+			"dish",
+			11,
+			505,
+			"00111111001",
+		},
+		{
+			"spy",
+			11,
+			1690,
+			"11010011010",
+		},
+		{
+			"spy",
+			12,
+			1690,
+			"011010011010",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := idxToBitString(tt.idx, tt.maxBitsLen); got != tt.want {
+				t.Errorf("dictionary.idxToBitString() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_tailBitsLenInChecksum(t *testing.T) {
+	tests := []struct {
+		name          string
+		bitsBatchSize int
+		want          int
+	}{
+		{
+			"for 11 bits in batch (bip39) its 4, as possible padding length 10 < 2^4",
+			11,
+			4,
+		},
+		{
+			// with 32 words we have 5 bits in batch
+			// with 5 bits max tail is 4 bits long
+			// to encode 4 to bits we need next to it 2^N
+			// and its 8 = 2^3
+			"32 words",
+			5,
+			3,
+		},
+		{
+			"2 words",
+			1,
+			0,
+		},
+		{
+			"4 words",
+			2,
+			1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tailBitsLenInChecksum(tt.bitsBatchSize))
+		})
+	}
 }

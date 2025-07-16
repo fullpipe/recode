@@ -6,6 +6,8 @@
 
 Package recode provides functionality to encode and decode any byte data into a mnemonic and back, using a custom word list.
 
+> Words list should be `2^N` long, 2,4,8, etc.
+
 ## Example
 
 ```go
@@ -18,7 +20,7 @@ import (
 
 func main() {
     rec, err := recode.NewDictionary(
-        []string{"my", "own", "random", "dictionary", "to", "have", "more", "fun", "with", "words"},
+        []string{"my", "own", "random", "words", "to", "have", "more", "fun"},
     )
     if err != nil {
         log.Fatal(err)
@@ -30,7 +32,7 @@ func main() {
         log.Fatal(err)
     }
 
-    log.Println(mnemonic) // my more fun my my more words my more ...
+    log.Println(mnemonic) // have words words to more to have ...
 
     // Decode the mnemonic back to byte data
     decoded, err := rec.Decode(mnemonic)
@@ -57,7 +59,7 @@ But who needs bip39 if you can use fruits & vegetables?
 ...
 entropy, _ := bip39.NewEntropy(256)
 
-fruits, _ := recode.NewDictionary([]string{"🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍐", "🍑", "🍒", "🍓", "🫐", "🥝", "🍅", "🫒", "🥥", "🥑", "🍆", "🥔", "🥕", "🌽", "🌶️", "🫑", "🥒", "🥬", "🥦", "🧄", "🧅", "🥜", "🫘", "🌰", "🫚", "🫛"})
+fruits, _ := recode.NewDictionary([]string{"🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍐", "🍑", "🍒", "🍓", "🫐", "🥝", "🍅", "🫒", "🥥", "🥑", "🍆", "🥔", "🥕", "🌽", "🌶️", "🫑", "🥒", "🥬", "🥦", "🧄", "🧅", "🥜", "🫘"})
 
 salat, _ := fruits.Encode(entropy)
 

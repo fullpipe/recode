@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 )
 
@@ -12,9 +13,14 @@ const checksumLen = 4
 
 type dictionary struct {
 	bitsToWord    map[string]string
-	wordToBits    map[string]int
-	maxBitsLen    int
+	wordToBits    map[string]string
+	bitsToInt     map[string]int
+	bitsBatchSize int
 	wordsChecksum []byte
+	checksumLen   int
+	// how many bit in checksum are for tail len
+	// bitsBatchSize = checksumLen + tailChecksumLen
+	tailChecksumLen int
 }
 
 type Recoder interface {
@@ -32,8 +38,15 @@ func NewDictionary(words []string) (Recoder, error) {
 		return nil, errors.New("more than 2 words are required")
 	}
 
+	bitLenRaw := math.Log2(float64(len(words)))
+	if bitLenRaw != float64(int64(bitLenRaw)) {
+		return nil, errors.New("dictionary should be complete, len(words) == 2^N")
+	}
+	bitsBatchSize := int(bitLenRaw)
+
 	bitsToWord := make(map[string]string, len(words))
-	wordToBits := make(map[string]int, len(words))
+	wordToBits := make(map[string]string, len(words))
+	bitsToInt := make(map[string]int, len(words))
 	dups := make(map[string]bool, len(words))
 	h := sha256.New()
 
@@ -51,19 +64,56 @@ func NewDictionary(words []string) (Recoder, error) {
 		}
 		dups[word] = true
 
-		bitsToWord[fmt.Sprintf("%b", i)] = word
-		wordToBits[word] = i
+		bitWord := idxToBitString(i, bitsBatchSize)
+		bitsToWord[bitWord] = word
+		wordToBits[word] = bitWord
+		bitsToInt[bitWord] = i
+
 		h.Write([]byte(word))
 	}
 
-	maxBitsLen := math.Ceil(math.Log2(float64(len(words))))
+	tailChecksumLen := tailBitsLenInChecksum(bitsBatchSize)
+	checksumLen := bitsBatchSize - tailChecksumLen
 
 	return &dictionary{
-		bitsToWord:    bitsToWord,
-		wordToBits:    wordToBits,
-		maxBitsLen:    int(maxBitsLen),
-		wordsChecksum: h.Sum(nil),
+		bitsToWord:      bitsToWord,
+		wordToBits:      wordToBits,
+		bitsToInt:       bitsToInt,
+		bitsBatchSize:   bitsBatchSize,
+		wordsChecksum:   h.Sum(nil),
+		checksumLen:     checksumLen,
+		tailChecksumLen: tailChecksumLen,
 	}, nil
+}
+
+func tailBitsLenInChecksum(bitsBatchSize int) int {
+	tailChecksumLen := 0
+	if bitsBatchSize > 1 {
+		tailChecksumLen = int(math.Ceil(math.Log2(float64(bitsBatchSize))))
+	}
+
+	return tailChecksumLen
+}
+
+// padByteSlice returns a byte slice of the given size with contents of the
+// given slice left padded and any empty spaces filled with 0's.
+func padByteSlice(slice []byte, length int) []byte {
+	offset := length - len(slice)
+	if offset <= 0 {
+		return slice
+	}
+	newSlice := make([]byte, length)
+	copy(newSlice[offset:], slice)
+	return newSlice
+}
+
+func idxToBitString(idx int, bitLen int) string {
+	n := big.NewInt(int64(idx))
+	b := padByteSlice(n.Bytes(), 2)
+
+	str := fmt.Sprintf("%08b", b[0]) + fmt.Sprintf("%08b", b[1])
+
+	return str[16-bitLen:]
 }
 
 func (d *dictionary) Encode(data []byte) ([]string, error) {
@@ -79,45 +129,75 @@ func (d *dictionary) Encode(data []byte) ([]string, error) {
 		return mnemonic, err
 	}
 
-	bits := bitsBuilder.String() + cs
+	bits := bitsBuilder.String()
 
-	right, left := 0, d.maxBitsLen
-	for right < len(bits) {
-		if left > len(bits) {
-			left = len(bits)
-		}
+	// how many bits we should take from last word
+	tailLen := len(bits) % d.bitsBatchSize
+	tailLenBits := idxToBitString(tailLen, d.bitsBatchSize)
+	tailLenBits = tailLenBits[len(tailLenBits)-d.tailChecksumLen:]
 
-		lb := bits[right:left]
+	// add checksum at the begining
+	// so when decoding we dont care about its paddings
+	bits = cs + tailLenBits + bits
+
+	for i := 0; i < len(bits)-tailLen; i += d.bitsBatchSize {
+		lb := bits[i : i+d.bitsBatchSize]
 		word, ok := d.bitsToWord[lb]
-		if ok {
-			mnemonic = append(mnemonic, word)
-			right = left
-			left = right + d.maxBitsLen
-			continue
+		if !ok {
+			return mnemonic, errors.New("this should not exists")
 		}
 
-		left -= 1
+		mnemonic = append(mnemonic, word)
+	}
+
+	if tailLen > 0 {
+		tailBits := bits[len(bits)-tailLen:]
+		tailBits += strings.Repeat("1", d.bitsBatchSize-tailLen)
+		tailWord, ok := d.bitsToWord[tailBits]
+		if !ok {
+			return mnemonic, errors.New("this should not exists")
+		}
+		mnemonic = append(mnemonic, tailWord)
 	}
 
 	return mnemonic, nil
 }
 
 func (d *dictionary) Decode(mnemonic []string) ([]byte, error) {
+	if len(mnemonic) == 0 {
+		return nil, errors.New("empty mnemonic")
+	}
+
+	checksumTailBits, ok := d.wordToBits[mnemonic[0]]
+	if !ok {
+		return nil, errors.New("invalid mnemonic words")
+	}
+
+	checksum, tailLenBits := checksumTailBits[:d.checksumLen], checksumTailBits[d.checksumLen:]
+
+	tailLen := 0
+	if d.tailChecksumLen > 0 {
+		tailLenBits = strings.Repeat("0", d.bitsBatchSize-d.tailChecksumLen) + tailLenBits
+		tailLen, ok = d.bitsToInt[tailLenBits]
+		if !ok {
+			return nil, errors.New("invalid tail")
+		}
+	}
+
 	var bitsBuilder strings.Builder
-	for _, m := range mnemonic {
-		idx, ok := d.wordToBits[m]
+	for i := 1; i < len(mnemonic); i++ {
+		wordBits, ok := d.wordToBits[mnemonic[i]]
 		if !ok {
 			return nil, errors.New("invalid mnemonic word")
 		}
-		bitsBuilder.WriteString(fmt.Sprintf("%b", idx))
+		bitsBuilder.WriteString(wordBits)
 	}
 
 	bitString := bitsBuilder.String()
-	if len(bitString) < checksumLen {
-		return nil, errors.New("mnemonic too short for checksum")
+	if tailLen > 0 {
+		paddingLen := d.bitsBatchSize - tailLen
+		bitString = bitString[:len(bitString)-paddingLen]
 	}
-	checksum := bitString[len(bitString)-checksumLen:]
-	bitString = bitString[:len(bitString)-checksumLen]
 
 	src := []byte(bitString)
 	dst := make([]byte, len(src)/8)
@@ -143,6 +223,7 @@ func (d *dictionary) Decode(mnemonic []string) ([]byte, error) {
 	return dst, nil
 }
 
+// checksum calculates bit string one word length
 func (d *dictionary) checksum(data []byte) (string, error) {
 	h := sha256.New()
 	_, err := h.Write(data)
@@ -155,8 +236,9 @@ func (d *dictionary) checksum(data []byte) (string, error) {
 	}
 
 	sum := h.Sum(nil)
+	str := fmt.Sprintf("%08b", sum[0]) + fmt.Sprintf("%08b", sum[1])
 
-	return fmt.Sprintf("%08b", sum[0])[:checksumLen], nil
+	return str[:d.checksumLen], nil
 }
 
 var _ Recoder = &dictionary{}
