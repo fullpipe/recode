@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const checksumLen = 4
-
 type dictionary struct {
 	bitsToWord    map[string]string
 	wordToBits    map[string]string
