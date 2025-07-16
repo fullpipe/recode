@@ -1,5 +1,9 @@
 # recode
 
+[![test](https://github.com/fullpipe/recode/actions/workflows/test.yml/badge.svg)](https://github.com/fullpipe/recode/actions/workflows/test.yml)
+[![lint](https://github.com/fullpipe/recode/actions/workflows/lint.yml/badge.svg)](https://github.com/fullpipe/recode/actions/workflows/lint.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/fullpipe/recode.svg)](https://pkg.go.dev/github.com/fullpipe/recode)
+
 Package recode provides functionality to encode and decode any byte data into a mnemonic and back, using a custom word list.
 
 ## Example
