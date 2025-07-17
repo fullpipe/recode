@@ -66,10 +66,12 @@ salat, _ := fruits.Encode(entropy)
 log.Println(string(salat)) // 🍒 🧄 🍆 🥕 🥑 🫑 🍉 🍇 🥔 🫚 🥥 🍍 🍎 🌽 🍑 ...
 ```
 
-## Features
+## Features and restrictions
 
 - **Custom Word List**: Use your own set of words for encoding and decoding.
 - **Flexible**: Works with any byte data, of any length.
+- **Power of Two**: The word list must have a length that is a power of two.
+- **Checksum**: The checksum is included in the mnemonic, ensuring data integrity.
 
 ## Contributing
 
